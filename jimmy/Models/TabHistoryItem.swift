@@ -9,8 +9,8 @@ import Foundation
 import Network
 
 struct TabHistoryItem {
-    var url: URL
-    var scrollposition: Double
-    var error: NWError?
-    var message: Data?
+  var url: URL
+  var scrollposition: Double
+  var error: NWError?
+  var message: Data?
 }

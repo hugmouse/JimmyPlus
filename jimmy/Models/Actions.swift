@@ -8,5 +8,5 @@
 import Foundation
 
 class Actions: ObservableObject {
-    @Published var reload = 0
+  @Published var reload = 0
 }

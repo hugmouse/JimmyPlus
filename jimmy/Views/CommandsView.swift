@@ -8,14 +8,14 @@
 import SwiftUI
 
 struct CommandsView: View {
-    @Environment(\.openURL) var openURL
-    @EnvironmentObject var actions: Actions
-    var body: some View {
-        Button("New Tab") { openURL(URL(string: "gemini://about")!) }.keyboardShortcut("t")
-        Divider()
-        Button("Reload") {
-            actions.reload += 1
-        }.keyboardShortcut("r")
+  @Environment(\.openURL) var openURL
+  @EnvironmentObject var actions: Actions
+  var body: some View {
+    Button("New Tab") { openURL(URL(string: "gemini://about")!) }.keyboardShortcut("t")
+    Divider()
+    Button("Reload") {
+      actions.reload += 1
+    }.keyboardShortcut("r")
 
-    }
+  }
 }

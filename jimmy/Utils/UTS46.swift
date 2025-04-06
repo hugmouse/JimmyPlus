@@ -5,8 +5,8 @@
 //  Created by Nate Weaver on 2020-03-29.
 //
 
-import Foundation
 import Compression
+import Foundation
 
 /// UTS46 mapping.
 ///
@@ -70,144 +70,146 @@ import Compression
 ///
 class UTS46 {
 
-	static var characterMap: [UInt32: String] = [:]
-	static var ignoredCharacters: CharacterSet = []
-	static var disallowedCharacters: CharacterSet = []
-	static var joiningTypes = [UInt32: JoiningType]()
+  static var characterMap: [UInt32: String] = [:]
+  static var ignoredCharacters: CharacterSet = []
+  static var disallowedCharacters: CharacterSet = []
+  static var joiningTypes = [UInt32: JoiningType]()
 
-	static var isLoaded = false
+  static var isLoaded = false
 
-	enum Marker {
-		static let characterMap = UInt8.max
-		static let ignoredCharacters = UInt8.max - 1
-		static let disallowedCharacters = UInt8.max - 2
-		static let joiningTypes = UInt8.max - 3
+  enum Marker {
+    static let characterMap = UInt8.max
+    static let ignoredCharacters = UInt8.max - 1
+    static let disallowedCharacters = UInt8.max - 2
+    static let joiningTypes = UInt8.max - 3
 
-		static let min = UInt8.max - 10 // No valid UTF-8 byte can fall here.
+    static let min = UInt8.max - 10  // No valid UTF-8 byte can fall here.
 
-		static let sequenceTerminator: UInt8 = 0
-	}
+    static let sequenceTerminator: UInt8 = 0
+  }
 
-	enum JoiningType: Character {
-		case causing = "C"
-		case dual = "D"
-		case right = "R"
-		case left = "L"
-		case transparent = "T"
-	}
+  enum JoiningType: Character {
+    case causing = "C"
+    case dual = "D"
+    case right = "R"
+    case left = "L"
+    case transparent = "T"
+  }
 
-	enum UTS46Error: Error {
-		case badSize
-		case compressionError
-		case decompressionError
-		case badMarker
-		case unknownVersion
-		case badCRC
-	}
+  enum UTS46Error: Error {
+    case badSize
+    case compressionError
+    case decompressionError
+    case badMarker
+    case unknownVersion
+    case badCRC
+  }
 
-	/// Identical values to `NSData.CompressionAlgorithm + 1`.
-	enum CompressionAlgorithm: UInt8 {
-		case none = 0
-		case lzfse = 1
-		case lz4 = 2
-		case lzma = 3
-		case zlib = 4
+  /// Identical values to `NSData.CompressionAlgorithm + 1`.
+  enum CompressionAlgorithm: UInt8 {
+    case none = 0
+    case lzfse = 1
+    case lz4 = 2
+    case lzma = 3
+    case zlib = 4
 
-		var rawAlgorithm: compression_algorithm? {
-			switch self {
-				case .lzfse:
-					return COMPRESSION_LZFSE
-				case .lz4:
-					return COMPRESSION_LZ4
-				case .lzma:
-					return COMPRESSION_LZMA
-				case .zlib:
-					return COMPRESSION_ZLIB
-				default:
-					return nil
-			}
-		}
-	}
+    var rawAlgorithm: compression_algorithm? {
+      switch self {
+      case .lzfse:
+        return COMPRESSION_LZFSE
+      case .lz4:
+        return COMPRESSION_LZ4
+      case .lzma:
+        return COMPRESSION_LZMA
+      case .zlib:
+        return COMPRESSION_ZLIB
+      default:
+        return nil
+      }
+    }
+  }
 
-	struct Header: RawRepresentable, CustomDebugStringConvertible {
-		typealias RawValue = [UInt8]
+  struct Header: RawRepresentable, CustomDebugStringConvertible {
+    typealias RawValue = [UInt8]
 
-		var rawValue: [UInt8] {
-			var value = Self.signature + [version, flags.rawValue]
+    var rawValue: [UInt8] {
+      var value = Self.signature + [version, flags.rawValue]
 
-			if self.hasCRC, let crc = crc {
-				var crcValue = crc.littleEndian
-				let crcData = Data(bytes: &crcValue, count: MemoryLayout.stride(ofValue: crcValue))
-				value += crcData
+      if self.hasCRC, let crc = crc {
+        var crcValue = crc.littleEndian
+        let crcData = Data(bytes: &crcValue, count: MemoryLayout.stride(ofValue: crcValue))
+        value += crcData
 
-				assert(value.count == 12)
-			} else {
-				assert(value.count == 8)
-			}
+        assert(value.count == 12)
+      } else {
+        assert(value.count == 8)
+      }
 
-			return value
-		}
+      return value
+    }
 
-		private static let compressionMask: UInt8 = 0x07
-		private static let signature: [UInt8] = Array("UTS#46".utf8)
+    private static let compressionMask: UInt8 = 0x07
+    private static let signature: [UInt8] = Array("UTS#46".utf8)
 
-		private struct Flags: RawRepresentable {
-			var rawValue: UInt8 {
-				return (hasCRC ? hasCRCMask : 0) | compression.rawValue
-			}
+    private struct Flags: RawRepresentable {
+      var rawValue: UInt8 {
+        return (hasCRC ? hasCRCMask : 0) | compression.rawValue
+      }
 
-			let hasCRC: Bool
-			let compression: CompressionAlgorithm
+      let hasCRC: Bool
+      let compression: CompressionAlgorithm
 
-			private let hasCRCMask: UInt8 = 1 << 3
-			private let compressionMask: UInt8 = 0x7
+      private let hasCRCMask: UInt8 = 1 << 3
+      private let compressionMask: UInt8 = 0x7
 
-			init(rawValue: UInt8) {
-				hasCRC = rawValue & hasCRCMask != 0
-				let compressionBits = rawValue & compressionMask
+      init(rawValue: UInt8) {
+        hasCRC = rawValue & hasCRCMask != 0
+        let compressionBits = rawValue & compressionMask
 
-				compression = CompressionAlgorithm(rawValue: compressionBits) ?? .none
-			}
+        compression = CompressionAlgorithm(rawValue: compressionBits) ?? .none
+      }
 
-			init(compression: CompressionAlgorithm = .none, hasCRC: Bool = false) {
-				self.compression = compression
-				self.hasCRC = hasCRC
-			}
-		}
+      init(compression: CompressionAlgorithm = .none, hasCRC: Bool = false) {
+        self.compression = compression
+        self.hasCRC = hasCRC
+      }
+    }
 
-		let version: UInt8
-		private var flags: Flags
-		var hasCRC: Bool { flags.hasCRC }
-		var crc: UInt32?
-		var compression: CompressionAlgorithm { flags.compression }
-		var dataOffset: Int { 8 + (flags.hasCRC ? 4 : 0) }
+    let version: UInt8
+    private var flags: Flags
+    var hasCRC: Bool { flags.hasCRC }
+    var crc: UInt32?
+    var compression: CompressionAlgorithm { flags.compression }
+    var dataOffset: Int { 8 + (flags.hasCRC ? 4 : 0) }
 
-		init?<T>(rawValue: T) where T: DataProtocol, T: ContiguousBytes, T.Index == Int {
-			guard rawValue.count >= 8 else { return nil }
-			guard rawValue.prefix(Self.signature.count).elementsEqual(Self.signature) else { return nil }
+    init?<T>(rawValue: T) where T: DataProtocol, T: ContiguousBytes, T.Index == Int {
+      guard rawValue.count >= 8 else { return nil }
+      guard rawValue.prefix(Self.signature.count).elementsEqual(Self.signature) else { return nil }
 
-			version = rawValue[rawValue.index(rawValue.startIndex, offsetBy: 6)]
-			flags = Flags(rawValue: rawValue[rawValue.index(rawValue.startIndex, offsetBy: 7)])
+      version = rawValue[rawValue.index(rawValue.startIndex, offsetBy: 6)]
+      flags = Flags(rawValue: rawValue[rawValue.index(rawValue.startIndex, offsetBy: 7)])
 
-			if flags.hasCRC {
-				guard rawValue.count >= 12 else { return nil }
-				
-				let crcStart = rawValue.index(rawValue.startIndex, offsetBy: 8)
+      if flags.hasCRC {
+        guard rawValue.count >= 12 else { return nil }
 
-				crc = rawValue.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-					return UInt32(littleEndian: buffer.load(fromByteOffset: crcStart, as: UInt32.self))
-				}
+        let crcStart = rawValue.index(rawValue.startIndex, offsetBy: 8)
 
-			}
-		}
+        crc = rawValue.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
+          return UInt32(littleEndian: buffer.load(fromByteOffset: crcStart, as: UInt32.self))
+        }
 
-		init(compression: CompressionAlgorithm = .none, crc: UInt32?) {
-			version = 1
-			flags = Flags(compression: compression, hasCRC: crc != nil)
-			self.crc = crc
-		}
+      }
+    }
 
-		var debugDescription: String { "has CRC: \(hasCRC); compression: \(String(describing: compression))" }
-	}
+    init(compression: CompressionAlgorithm = .none, crc: UInt32?) {
+      version = 1
+      flags = Flags(compression: compression, hasCRC: crc != nil)
+      self.crc = crc
+    }
+
+    var debugDescription: String {
+      "has CRC: \(hasCRC); compression: \(String(describing: compression))"
+    }
+  }
 
 }

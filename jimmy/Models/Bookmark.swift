@@ -8,12 +8,12 @@
 import Foundation
 
 struct Bookmark: Identifiable, Decodable, Encodable {
-    var id: UUID
-    
-    var url: URL
-    
-    init (url: URL) {
-        self.url = url
-        self.id = UUID()
-    }
+  var id: UUID
+
+  var url: URL
+
+  init(url: URL) {
+    self.url = url
+    self.id = UUID()
+  }
 }

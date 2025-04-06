@@ -5,247 +5,249 @@
 //  Created by Nate Weaver on 2020-05-08.
 //
 
-import Foundation
 import Compression
+import Foundation
 import os
 
 extension UTS46 {
 
-	private static func parseHeader(from data: Data) throws -> Header? {
-		let headerData = data.prefix(12)
+  private static func parseHeader(from data: Data) throws -> Header? {
+    let headerData = data.prefix(12)
 
-		guard headerData.count == 12 else { throw UTS46Error.badSize }
+    guard headerData.count == 12 else { throw UTS46Error.badSize }
 
-		return Header(rawValue: headerData)
-	}
+    return Header(rawValue: headerData)
+  }
 
-	static func load(from url: URL) throws {
-		let fileData = try Data(contentsOf: url)
+  static func load(from url: URL) throws {
+    let fileData = try Data(contentsOf: url)
 
-		guard let header = try? parseHeader(from: fileData) else { return }
+    guard let header = try? parseHeader(from: fileData) else { return }
 
-		guard header.version == 1 else { throw UTS46Error.unknownVersion }
+    guard header.version == 1 else { throw UTS46Error.unknownVersion }
 
-		let offset = header.dataOffset
+    let offset = header.dataOffset
 
-		guard fileData.count > offset else { throw UTS46Error.badSize }
+    guard fileData.count > offset else { throw UTS46Error.badSize }
 
-		switch header.version {
-			case 1:
-				break;
-			default:
-				if #available(macOS 10.12, iOS 10.0, tvOS 10.0, watchOS 3.0, *) {
-					os_log("Unrecognized version found; assuming 1.", type: .debug)
-				} else {
-					print("Unrecognized version found; assuming 1.")
-				}
-		}
+    switch header.version {
+    case 1:
+      break
+    default:
+      if #available(macOS 10.12, iOS 10.0, tvOS 10.0, watchOS 3.0, *) {
+        os_log("Unrecognized version found; assuming 1.", type: .debug)
+      } else {
+        print("Unrecognized version found; assuming 1.")
+      }
+    }
 
-		let compressedData = fileData[offset...]
+    let compressedData = fileData[offset...]
 
-		if let crc = header.crc {
-			guard crc == compressedData.crc32 else { throw UTS46Error.badCRC }
-		}
+    if let crc = header.crc {
+      guard crc == compressedData.crc32 else { throw UTS46Error.badCRC }
+    }
 
-		guard let data = self.decompress(data: compressedData, algorithm: header.compression) else {
-			throw UTS46Error.decompressionError
-		}
+    guard let data = self.decompress(data: compressedData, algorithm: header.compression) else {
+      throw UTS46Error.decompressionError
+    }
 
-		var index = 0
+    var index = 0
 
-		while index < data.count {
-			let marker = data[index]
+    while index < data.count {
+      let marker = data[index]
 
-			index += 1
+      index += 1
 
-			switch marker {
-				case Marker.characterMap:
-					index = parseCharacterMap(from: data, start: index)
-				case Marker.ignoredCharacters:
-					index = parseIgnoredCharacters(from: data, start: index)
-				case Marker.disallowedCharacters:
-					index = parseDisallowedCharacters(from: data, start: index)
-				case Marker.joiningTypes:
-					index = parseJoiningTypes(from: data, start: index)
-				default:
-					throw UTS46Error.badMarker
-			}
-		}
+      switch marker {
+      case Marker.characterMap:
+        index = parseCharacterMap(from: data, start: index)
+      case Marker.ignoredCharacters:
+        index = parseIgnoredCharacters(from: data, start: index)
+      case Marker.disallowedCharacters:
+        index = parseDisallowedCharacters(from: data, start: index)
+      case Marker.joiningTypes:
+        index = parseJoiningTypes(from: data, start: index)
+      default:
+        throw UTS46Error.badMarker
+      }
+    }
 
-		isLoaded = true
-	}
+    isLoaded = true
+  }
 
-	static var bundle: Bundle {
-		#if SWIFT_PACKAGE
-		return Bundle.module
-		#else
-		return Bundle(for: Self.self)
-		#endif
-	}
+  static var bundle: Bundle {
+    #if SWIFT_PACKAGE
+      return Bundle.module
+    #else
+      return Bundle(for: Self.self)
+    #endif
+  }
 
-	static func loadIfNecessary() throws {
-		guard !isLoaded else { return }
-		guard let url = Self.bundle.url(forResource: "uts46", withExtension: nil) else {
-			if #available(macOS 10.12, iOS 10.0, tvOS 10.0, watchOS 3.0, *) {
-				os_log("uts46 data file is missing!", type: .error)
-			} else {
-				print("uts46 data file is missing!")
-			}
-			
-			throw CocoaError(.fileNoSuchFile)
-		}
+  static func loadIfNecessary() throws {
+    guard !isLoaded else { return }
+    guard let url = Self.bundle.url(forResource: "uts46", withExtension: nil) else {
+      if #available(macOS 10.12, iOS 10.0, tvOS 10.0, watchOS 3.0, *) {
+        os_log("uts46 data file is missing!", type: .error)
+      } else {
+        print("uts46 data file is missing!")
+      }
 
-		try load(from: url)
-	}
+      throw CocoaError(.fileNoSuchFile)
+    }
 
-	private static func decompress(data: Data, algorithm: CompressionAlgorithm?) -> Data? {
+    try load(from: url)
+  }
 
-		guard let rawAlgorithm = algorithm?.rawAlgorithm else { return data }
+  private static func decompress(data: Data, algorithm: CompressionAlgorithm?) -> Data? {
 
-		let capacity = 131_072 // 128 KB
-		let destinationBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: capacity)
+    guard let rawAlgorithm = algorithm?.rawAlgorithm else { return data }
 
-		let decompressed = data.withUnsafeBytes { (rawBuffer) -> Data? in
-			let bound = rawBuffer.bindMemory(to: UInt8.self)
-			let decodedCount = compression_decode_buffer(destinationBuffer, capacity, bound.baseAddress!, rawBuffer.count, nil, rawAlgorithm)
+    let capacity = 131_072  // 128 KB
+    let destinationBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: capacity)
 
-			if decodedCount == 0 || decodedCount == capacity {
-				return nil
-			}
+    let decompressed = data.withUnsafeBytes { (rawBuffer) -> Data? in
+      let bound = rawBuffer.bindMemory(to: UInt8.self)
+      let decodedCount = compression_decode_buffer(
+        destinationBuffer, capacity, bound.baseAddress!, rawBuffer.count, nil, rawAlgorithm)
 
-			return Data(bytes: destinationBuffer, count: decodedCount)
-		}
+      if decodedCount == 0 || decodedCount == capacity {
+        return nil
+      }
 
-		return decompressed
-	}
+      return Data(bytes: destinationBuffer, count: decodedCount)
+    }
 
-	private static func parseCharacterMap(from data: Data, start: Int) -> Int {
-		characterMap.removeAll()
-		var index = start
+    return decompressed
+  }
 
-		main: while index < data.count {
-			var accumulator = Data()
+  private static func parseCharacterMap(from data: Data, start: Int) -> Int {
+    characterMap.removeAll()
+    var index = start
 
-			while data[index] != Marker.sequenceTerminator {
-				if data[index] > Marker.min { break main }
+    main: while index < data.count {
+      var accumulator = Data()
 
-				accumulator.append(data[index])
-				index += 1
-			}
+      while data[index] != Marker.sequenceTerminator {
+        if data[index] > Marker.min { break main }
 
-			let str = String(data: accumulator, encoding: .utf8)!
+        accumulator.append(data[index])
+        index += 1
+      }
 
-			// FIXME: throw an error here.
-			guard str.count > 0 else { continue }
+      let str = String(data: accumulator, encoding: .utf8)!
 
-			let codepoint = str.unicodeScalars.first!.value
+      // FIXME: throw an error here.
+      guard str.count > 0 else { continue }
 
-			characterMap[codepoint] = String(str.unicodeScalars.dropFirst())
+      let codepoint = str.unicodeScalars.first!.value
 
-			index += 1
-		}
+      characterMap[codepoint] = String(str.unicodeScalars.dropFirst())
 
-		return index
-	}
+      index += 1
+    }
 
-	private static func parseRanges(from: String) -> [ClosedRange<UnicodeScalar>]? {
-		guard from.unicodeScalars.count % 2 == 0 else { return nil }
+    return index
+  }
 
-		var ranges = [ClosedRange<UnicodeScalar>]()
-		var first: UnicodeScalar?
+  private static func parseRanges(from: String) -> [ClosedRange<UnicodeScalar>]? {
+    guard from.unicodeScalars.count % 2 == 0 else { return nil }
 
-		for (index, scalar) in from.unicodeScalars.enumerated() {
-			if index % 2 == 0 {
-				first = scalar
-			} else if let first = first {
-				ranges.append(first...scalar)
-			}
-		}
+    var ranges = [ClosedRange<UnicodeScalar>]()
+    var first: UnicodeScalar?
 
-		return ranges
-	}
+    for (index, scalar) in from.unicodeScalars.enumerated() {
+      if index % 2 == 0 {
+        first = scalar
+      } else if let first = first {
+        ranges.append(first...scalar)
+      }
+    }
 
-	static func parseCharacterSet(from data: Data, start: Int) -> (index: Int, charset: CharacterSet?) {
-		var index = start
-		var accumulator = Data()
+    return ranges
+  }
 
-		while index < data.count, data[index] < Marker.min {
-			accumulator.append(data[index])
-			index += 1
-		}
+  static func parseCharacterSet(from data: Data, start: Int) -> (index: Int, charset: CharacterSet?)
+  {
+    var index = start
+    var accumulator = Data()
 
-		let str = String(data: accumulator, encoding: .utf8)!
+    while index < data.count, data[index] < Marker.min {
+      accumulator.append(data[index])
+      index += 1
+    }
 
-		guard let ranges = parseRanges(from: str) else {
-			return (index: index, charset: nil)
-		}
+    let str = String(data: accumulator, encoding: .utf8)!
 
-		var charset = CharacterSet()
+    guard let ranges = parseRanges(from: str) else {
+      return (index: index, charset: nil)
+    }
 
-		for range in ranges {
-			charset.insert(charactersIn: range)
-		}
+    var charset = CharacterSet()
 
-		return (index: index, charset: charset)
-	}
+    for range in ranges {
+      charset.insert(charactersIn: range)
+    }
 
-	static func parseIgnoredCharacters(from data: Data, start: Int) -> Int {
-		let (index, charset) = parseCharacterSet(from: data, start: start)
+    return (index: index, charset: charset)
+  }
 
-		if let charset = charset {
-			ignoredCharacters = charset
-		}
+  static func parseIgnoredCharacters(from data: Data, start: Int) -> Int {
+    let (index, charset) = parseCharacterSet(from: data, start: start)
 
-		return index
-	}
+    if let charset = charset {
+      ignoredCharacters = charset
+    }
 
-	static func parseDisallowedCharacters(from data: Data, start: Int) -> Int {
-		let (index, charset) = parseCharacterSet(from: data, start: start)
+    return index
+  }
 
-		if let charset = charset {
-			disallowedCharacters = charset
-		}
+  static func parseDisallowedCharacters(from data: Data, start: Int) -> Int {
+    let (index, charset) = parseCharacterSet(from: data, start: start)
 
-		return index
-	}
+    if let charset = charset {
+      disallowedCharacters = charset
+    }
 
-	static func parseJoiningTypes(from data: Data, start: Int) -> Int {
-		var index = start
-		joiningTypes.removeAll()
+    return index
+  }
 
-		main: while index < data.count, data[index] < Marker.min {
-			var accumulator = Data()
+  static func parseJoiningTypes(from data: Data, start: Int) -> Int {
+    var index = start
+    joiningTypes.removeAll()
 
-			while index < data.count {
-				if data[index] > Marker.min { break main }
-				accumulator.append(data[index])
+    main: while index < data.count, data[index] < Marker.min {
+      var accumulator = Data()
 
-				index += 1
-			}
+      while index < data.count {
+        if data[index] > Marker.min { break main }
+        accumulator.append(data[index])
 
-			let str = String(data: accumulator, encoding: .utf8)!
+        index += 1
+      }
 
-			var type: JoiningType?
-			var first: UnicodeScalar?
+      let str = String(data: accumulator, encoding: .utf8)!
 
-			for scalar in str.unicodeScalars {
-				if scalar.isASCII {
-					type = JoiningType(rawValue: Character(scalar))
-				} else if let type = type {
-					if first == nil {
-						first = scalar
-					} else {
-						for value in first!.value...scalar.value {
-							joiningTypes[value] = type
-						}
+      var type: JoiningType?
+      var first: UnicodeScalar?
 
-						first = nil
-					}
-				}
-			}
-		}
+      for scalar in str.unicodeScalars {
+        if scalar.isASCII {
+          type = JoiningType(rawValue: Character(scalar))
+        } else if let type = type {
+          if first == nil {
+            first = scalar
+          } else {
+            for value in first!.value...scalar.value {
+              joiningTypes[value] = type
+            }
 
-		return index
-	}
+            first = nil
+          }
+        }
+      }
+    }
+
+    return index
+  }
 
 }
