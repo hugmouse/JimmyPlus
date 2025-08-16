@@ -59,6 +59,8 @@ struct LineView: View, Hashable {
         label: {
           Text(String(format: format, tab.emojis.emoji(tab.url.host ?? ""), (tab.url.host ?? "")))
         })
+        .accessibilityLabel("Ignore certificate validation for \(tab.url.host ?? "this host")")
+        .accessibilityHint("Tap to ignore certificate errors for this website")
     } else if type.starts(with: "text/answer") {
       // Line for an answer. The question should be above this
       HStack {
@@ -67,9 +69,13 @@ struct LineView: View, Hashable {
           .onSubmit {
             send()
           }
+          .accessibilityLabel("Answer input field")
+          .accessibilityHint("Enter your answer and press return to submit")
         Button(action: send) {
           Text("Send")
         }
+        .accessibilityLabel("Send answer")
+        .accessibilityHint("Submit your answer to the server")
       }
     } else if type.starts(with: "image/") {
       // Line for an answer. The question should be above this
@@ -78,12 +84,18 @@ struct LineView: View, Hashable {
           .resizable()
           .aspectRatio(contentMode: .fit)
           .layoutPriority(-1)
+          .accessibilityLabel("Image from Gemtext document")
+          .accessibilityAddTraits(.isImage)
       } else {
         Image(systemName: "xmark")
+          .accessibilityLabel("Failed to load image")
+          .accessibilityAddTraits(.isImage)
       }
     } else {
       if let a = attrStr {
         AttributedText(a)
+          .accessibilityElement(children: .contain)
+          .accessibilityLabel("Gemtext content")
       }
     }
   }

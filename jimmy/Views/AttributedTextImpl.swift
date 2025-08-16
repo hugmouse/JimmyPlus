@@ -53,7 +53,8 @@ extension AttributedTextImpl: NSViewRepresentable {
     nsView.drawsBackground = false
     nsView.textContainerInset = .zero
     nsView.isEditable = false
-    nsView.isRichText = false
+    nsView.isSelectable = true
+    nsView.isRichText = true
     nsView.textContainer?.lineFragmentPadding = 0
     // we are setting the container's width manually
     nsView.textContainer?.widthTracksTextView = false
@@ -61,8 +62,13 @@ extension AttributedTextImpl: NSViewRepresentable {
       NSAttributedString.Key.foregroundColor: NSColor.linkColor
     ]
 
-    nsView.displaysLinkToolTips = false
+    nsView.displaysLinkToolTips = true
     nsView.delegate = context.coordinator
+    
+    // Configure accessibility
+    nsView.setAccessibilityRole(.textArea)
+    nsView.setAccessibilityLabel("Gemtext content")
+    nsView.setAccessibilityEnabled(true)
 
     return nsView
   }
@@ -153,9 +159,10 @@ extension AttributedTextImpl {
             } else {
 
               //                             not hovering this link
-              storage.removeAttribute(.link, range: range)
               storage.addAttribute(.foregroundColor, value: NSColor.linkColor, range: range)
-              alllinks.append(AttributedStringLink(url: u, range: range))
+              if !alllinks.contains(where: { $0.url == u && $0.range == range }) {
+                alllinks.append(AttributedStringLink(url: u, range: range))
+              }
             }
           }
         }
@@ -164,9 +171,6 @@ extension AttributedTextImpl {
         self.linkTextAttributes = [
           NSAttributedString.Key.foregroundColor: NSColor.linkColor
         ]
-        for oldlink in alllinks {
-          storage.addAttribute(.link, value: oldlink.url, range: oldlink.range)
-        }
         hoveredUrl = nil
         if wasHovered {
           // self.addCursorRect(self.bounds, cursor: .iBeam)
@@ -268,7 +272,11 @@ extension NSLineBreakMode {
   }
 }
 
-struct AttributedStringLink {
+struct AttributedStringLink: Equatable {
   var url: URL
   var range: NSRange
+  
+  static func == (lhs: AttributedStringLink, rhs: AttributedStringLink) -> Bool {
+    return lhs.url == rhs.url && NSEqualRanges(lhs.range, rhs.range)
+  }
 }
