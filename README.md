@@ -2,6 +2,9 @@
 
 #  JimmyPlus
 
+> [!WARNING]
+> This client is no longer supported and will not receive any updates.
+
 A gemini client for macOS. Fork of [Jimmy](https://github.com/jfoucher/Jimmy)! It is currently a prototype and will probably remain as such.
 
 JimmyPlus is a native [gemini](https://en.wikipedia.org/wiki/Gemini_(protocol)) client for MacOS, written in SwiftUI.
